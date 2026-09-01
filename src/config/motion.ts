@@ -17,6 +17,7 @@ export const motion = {
         k: 0.03,
         kReturn: 0.1,
         eps: 0.001,
+        fps: 60,
     },
 } as const;
 

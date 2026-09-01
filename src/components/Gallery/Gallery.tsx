@@ -202,6 +202,7 @@ function Gallery({ size }: { size: number }) {
         let lookTimer = 0;
         const arm = window.requestAnimationFrame(() => {
             setLookOff(true);
+            look.releaseToCss();
             lookTimer = window.setTimeout(() => {
                 look.resetLook();
                 setTurn(false);

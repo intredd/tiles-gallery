@@ -12,15 +12,42 @@ type LookRefs = {
 
 type TileLook = {
     el: HTMLElement;
+    lookEl: HTMLElement | null;
     cx: number;
     cy: number;
     lx: number;
     ly: number;
+    wx: number;
+    wy: number;
 };
 
-function collectTiles(grid: HTMLDivElement | null): HTMLElement[] {
-    if (!grid) return [];
-    return Array.from(grid.children).filter((n): n is HTMLElement => n instanceof HTMLElement);
+type LookApi = {
+    markLayoutDirty: () => void;
+    setFlipAxes: (x: number, y: number) => void;
+    resetLook: () => void;
+    releaseToCss: () => void;
+};
+
+const LOOK_TICK_MS = 1000 / motion.look.fps;
+const LOOK_WRITE_STEP = 0.05;
+
+function quantize(v: number) {
+    return Math.round(v / LOOK_WRITE_STEP) * LOOK_WRITE_STEP;
+}
+
+function writeLook(t: TileLook, x: number, y: number) {
+    const qx = quantize(x);
+    const qy = quantize(y);
+    if (qx === t.wx && qy === t.wy) return;
+    t.wx = qx;
+    t.wy = qy;
+    if (t.lookEl) t.lookEl.style.transform = `rotateX(${qx}deg) rotateY(${qy}deg)`;
+}
+
+function clearLookStyle(t: TileLook) {
+    t.wx = 0;
+    t.wy = 0;
+    if (t.lookEl) t.lookEl.style.transform = '';
 }
 
 export function useTileLook({
@@ -30,46 +57,79 @@ export function useTileLook({
     lookingRef,
     lookLockRef,
 }: LookRefs) {
-    const implRef = useRef({
+    const implRef = useRef<LookApi>({
         markLayoutDirty() {},
-        setFlipAxes(_x: number, _y: number) {},
+        setFlipAxes() {},
         resetLook() {},
+        releaseToCss() {},
     });
 
-    const apiRef = useRef({
+    const apiRef = useRef<LookApi>({
         markLayoutDirty() {
             implRef.current.markLayoutDirty();
         },
-        setFlipAxes(x: number, y: number) {
+        setFlipAxes(x, y) {
             implRef.current.setFlipAxes(x, y);
         },
         resetLook() {
             implRef.current.resetLook();
         },
+        releaseToCss() {
+            implRef.current.releaseToCss();
+        },
     });
 
     useEffect(() => {
-        const { z, strength, k, kReturn, eps } = motion.look;
+        const { z, strength, k, kReturn, eps, fps } = motion.look;
         const rad2deg = 180 / Math.PI;
+        const lambda = -Math.log(1 - k) * fps;
+        const lambdaReturn = -Math.log(1 - kReturn) * fps;
 
         const target = { x: innerWidth / 2, y: innerHeight / 2 };
         let tiles: TileLook[] = [];
         let dirty = true;
         let raf = 0;
         let running = false;
+        let lastLookTs = 0;
 
         const syncTiles = () => {
-            const els = collectTiles(gridRef.current);
-            const same =
-                els.length === tiles.length && els.every((el, i) => el === tiles[i].el);
-            if (same) return;
-            tiles = els.map((el, i) => ({
-                el,
-                cx: 0,
-                cy: 0,
-                lx: tiles[i]?.lx ?? 0,
-                ly: tiles[i]?.ly ?? 0,
-            }));
+            const grid = gridRef.current;
+            if (!grid) {
+                tiles = [];
+                return;
+            }
+
+            const kids = grid.children;
+            const n = kids.length;
+            if (n === tiles.length) {
+                let same = true;
+                for (let i = 0; i < n; i++) {
+                    if (tiles[i].el !== kids[i]) {
+                        same = false;
+                        break;
+                    }
+                }
+                if (same) return;
+            }
+
+            const prev = tiles;
+            const next: TileLook[] = [];
+            for (let i = 0; i < n; i++) {
+                const node = kids[i];
+                if (!(node instanceof HTMLElement)) continue;
+                const old = prev[i]?.el === node ? prev[i] : undefined;
+                next.push({
+                    el: node,
+                    lookEl: node.firstElementChild instanceof HTMLElement ? node.firstElementChild : null,
+                    cx: old?.cx ?? 0,
+                    cy: old?.cy ?? 0,
+                    lx: old?.lx ?? 0,
+                    ly: old?.ly ?? 0,
+                    wx: old?.wx ?? NaN,
+                    wy: old?.wy ?? NaN,
+                });
+            }
+            tiles = next;
             dirty = true;
         };
 
@@ -102,13 +162,19 @@ export function useTileLook({
                 for (const t of tiles) {
                     t.lx = 0;
                     t.ly = 0;
-                    t.el.style.setProperty('--look-x', '0deg');
-                    t.el.style.setProperty('--look-y', '0deg');
+                    clearLookStyle(t);
+                }
+            },
+            releaseToCss() {
+                for (const t of tiles) {
+                    t.lx = 0;
+                    t.ly = 0;
+                    clearLookStyle(t);
                 }
             },
         };
 
-        const tick = () => {
+        const tick = (ts: number) => {
             running = false;
             if (lookLockRef.current) return;
 
@@ -116,8 +182,17 @@ export function useTileLook({
             if (!tiles.length) return;
             if (dirty) cacheCenters();
 
+            if (lastLookTs !== 0 && ts - lastLookTs < LOOK_TICK_MS) {
+                running = true;
+                raf = requestAnimationFrame(tick);
+                return;
+            }
+
+            const dt = lastLookTs === 0 ? LOOK_TICK_MS / 1000 : Math.min((ts - lastLookTs) / 1000, 0.05);
+            lastLookTs = ts;
+
             const looking = lookingRef.current;
-            const step = looking ? k : kReturn;
+            const step = 1 - Math.exp(-(looking ? lambda : lambdaReturn) * dt);
             let moving = false;
 
             for (const t of tiles) {
@@ -133,13 +208,14 @@ export function useTileLook({
 
                 t.lx = nx;
                 t.ly = ny;
-                t.el.style.setProperty('--look-x', `${nx}deg`);
-                t.el.style.setProperty('--look-y', `${ny}deg`);
+                writeLook(t, nx, ny);
             }
 
             if (moving) {
                 running = true;
                 raf = requestAnimationFrame(tick);
+            } else {
+                lastLookTs = 0;
             }
         };
 
@@ -150,11 +226,11 @@ export function useTileLook({
         };
 
         const onMove = (e: PointerEvent) => {
-            const t = e.target as Node;
+            const node = e.target as Node;
             const inside =
                 modeRef.current === 'fullscreen'
-                    ? t instanceof Element && !!t.closest('.gallery__controls')
-                    : !!galleryRef.current?.contains(t);
+                    ? node instanceof Element && !!node.closest('.gallery__controls')
+                    : !!galleryRef.current?.contains(node);
             if (lookLockRef.current) {
                 lookingRef.current = false;
                 return;
@@ -163,7 +239,6 @@ export function useTileLook({
             if (inside) {
                 target.x = e.clientX;
                 target.y = e.clientY;
-                // fullscreen + controls hover animates tile gaps — centers must refresh
                 if (modeRef.current === 'fullscreen') dirty = true;
             }
             kick();
