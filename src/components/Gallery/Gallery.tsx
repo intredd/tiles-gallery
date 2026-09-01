@@ -1,40 +1,15 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react';
-import Tile from '../Tile/Tile.tsx'
-import { photos } from '../../data/images.ts'
-import { motion, motionStyle } from '../../config/motion.ts'
+import Tile from '../Tile/Tile.tsx';
+import { photos } from '../../data/images.ts';
+import { motion, motionStyle } from '../../config/motion.ts';
+import { paintsFor, wrap } from './paintTile.ts';
+import type { FacePaint, Mode, Pending, Spin } from './types.ts';
+import { useTileLook } from './useTileLook.ts';
 import './Gallery.scss';
 
-type Mode = 'fullscreen' | 'gallery';
-
-type FaceKind = 'mosaic' | 'full';
-
-type FacePaint = {
-    src: string;
-    kind: FaceKind;
-};
-
-type Spin = 'x' | 'next' | 'prev';
-
-const wrap = (i: number, n: number) => ((i % n) + n) % n;
-
-
-function paintTile(kind: FaceKind, tileIndex: number, currentIndex: number, size: number): FacePaint {
-    const n = photos.length;
-    if (kind === 'mosaic') {
-        return { src: photos[wrap(currentIndex, n)].src, kind };
-    }
+function Gallery({ size }: { size: number }) {
     const cells = size * size;
-    const pageStart = Math.floor(currentIndex / cells) * cells;
-    return {
-        src: photos[wrap(pageStart + tileIndex, n)].src,
-        kind,
-    };
-}
-
-
-function Gallery({size}: {size: number}) {
-    const cells = size * size;
-    const pageCount = photos.length / cells;
+    const pageCount = Math.ceil(photos.length / cells) || 1;
 
     const [mode, setMode] = useState<Mode>('gallery');
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -49,25 +24,28 @@ function Gallery({size}: {size: number}) {
     const [lookOff, setLookOff] = useState(false);
     const [turn, setTurn] = useState(false);
 
-
-    const pending = useRef<null
-        | { type: 'go'; delta: 1 | -1 }
-        | { type: 'toggle' }
-        | { type: 'open'; tileIndex: number }
-    >(null);
+    const pending = useRef<Pending | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
+    const galleryRef = useRef<HTMLDivElement>(null);
     const modeRef = useRef(mode);
     const lookingRef = useRef(false);
     const lookLockRef = useRef(false);
-    const galleryRef = useRef<HTMLDivElement>(null);
 
     modeRef.current = mode;
 
+    const look = useTileLook({
+        gridRef,
+        galleryRef,
+        modeRef,
+        lookingRef,
+        lookLockRef,
+    });
+
     const [frontPaints, setFrontPaints] = useState<FacePaint[]>(() =>
-        Array.from({ length: cells }, (_, i) => paintTile('mosaic', i, 0, size)),
+        paintsFor('mosaic', 0, size),
     );
     const [backPaints, setBackPaints] = useState<FacePaint[]>(() =>
-        Array.from({ length: cells }, (_, i) => paintTile('full', i, 0, size)),
+        paintsFor('full', 0, size),
     );
 
     function commitFlip(nextPaints: FacePaint[]) {
@@ -78,17 +56,6 @@ function Gallery({size}: {size: number}) {
         }
         setFlipped((v) => !v);
     }
-
-    function setFlipAxes(x: number, y: number) {
-        gridRef.current?.querySelectorAll<HTMLElement>('.tile').forEach((el) => {
-            const r = el.getBoundingClientRect();
-            const dx = x - (r.left + r.width / 2);
-            const dy = y - (r.top + r.height / 2);
-            const len = Math.hypot(dx, dy);
-            el.style.setProperty('--flip-ax', len < 1 ? '1' : String(dy / len));
-            el.style.setProperty('--flip-ay', len < 1 ? '0' : String(-dx / len));
-        });
-      }
 
     function applyOpenFromTile(tileIndex: number) {
         const pageStart = Math.floor(currentIndex / cells) * cells;
@@ -101,11 +68,7 @@ function Gallery({size}: {size: number}) {
             return next;
         });
 
-        commitFlip(
-            Array.from({ length: cells }, (_, i) =>
-            paintTile('mosaic', i, nextIndex, size),
-            ),
-        );
+        commitFlip(paintsFor('mosaic', nextIndex, size));
         setMode('fullscreen');
     }
 
@@ -114,7 +77,7 @@ function Gallery({size}: {size: number}) {
 
         lookLockRef.current = true;
         lookingRef.current = false;
-        setFlipAxes(e.clientX, e.clientY);
+        look.setFlipAxes(e.clientX, e.clientY);
         setHoldGaps(true);
         setTurn(true);
 
@@ -128,7 +91,7 @@ function Gallery({size}: {size: number}) {
     }
 
     function applyGo(delta: 1 | -1) {
-        const nextKind: FaceKind = mode === 'fullscreen' ? 'mosaic' : 'full';
+        const nextKind = mode === 'fullscreen' ? 'mosaic' : 'full';
         let nextIndex: number;
 
         if (mode === 'fullscreen') {
@@ -147,23 +110,15 @@ function Gallery({size}: {size: number}) {
 
         setSpin(delta === 1 ? 'next' : 'prev');
         setSpinY((y) => y + delta);
-        commitFlip(
-            Array.from({ length: cells }, (_, i) =>
-                paintTile(nextKind, i, nextIndex, size),
-            ),
-        );
+        commitFlip(paintsFor(nextKind, nextIndex, size));
         setCurrentIndex(nextIndex);
     }
 
     function applyToggle() {
-        const nextMode = mode === 'fullscreen' ? 'gallery' : 'fullscreen';
-        const nextKind: FaceKind = nextMode === 'gallery' ? 'full' : 'mosaic';
+        const nextMode: Mode = mode === 'fullscreen' ? 'gallery' : 'fullscreen';
+        const nextKind = nextMode === 'gallery' ? 'full' : 'mosaic';
         setSpin('x');
-        commitFlip(
-            Array.from({ length: cells }, (_, i) =>
-                paintTile(nextKind, i, currentIndex, size),
-            ),
-        );
+        commitFlip(paintsFor(nextKind, currentIndex, size));
         setMode(nextMode);
     }
 
@@ -189,12 +144,15 @@ function Gallery({size}: {size: number}) {
         applyToggle();
     }
 
+    // Snap is a one-frame "transition: none" paint so the next flip can change axis
+    // without interpolating from the previous rotateX/rotateY. apply* read state from
+    // this commit on purpose — do not add them to the dep array.
     useEffect(() => {
         if (!snap) return;
-    
+
         const job = pending.current;
         pending.current = null;
-    
+
         if (job) {
             setSnap(false);
             if (job.type === 'go') applyGo(job.delta);
@@ -202,7 +160,7 @@ function Gallery({size}: {size: number}) {
             if (job.type === 'open') applyOpenFromTile(job.tileIndex);
             return;
         }
-    
+
         const id = requestAnimationFrame(() => {
             requestAnimationFrame(() => setSnap(false));
         });
@@ -210,87 +168,8 @@ function Gallery({size}: {size: number}) {
     }, [snap]);
 
     useEffect(() => {
-        const { z, strength, k, kReturn, eps } = motion.look;
-        const rad2deg = 180 / Math.PI;
-
-        const target = { x: innerWidth / 2, y: innerHeight / 2 };
-        let raf = 0;
-        let running = false;
-
-        const tick = () => {
-            running = false;
-            const tiles = gridRef.current?.querySelectorAll<HTMLElement>('.tile');
-            if (!tiles || lookLockRef.current) return;
-
-            let moving = false;
-            tiles.forEach((el) => {
-                const r = el.getBoundingClientRect();
-                const dx = target.x - (r.left + r.width / 2);
-                const dy = target.y - (r.top + r.height / 2);
-                const looking = lookingRef.current;
-
-                const tx = looking ? -Math.atan(dy / z) * rad2deg * strength : 0;
-                const ty = looking ?  Math.atan(dx / z) * rad2deg * strength : 0;
-
-                const cx = Number(el.dataset.lx ?? 0);
-                const cy = Number(el.dataset.ly ?? 0);
-                const step = looking ? k : kReturn;
-
-                let nx = cx + (tx - cx) * step;
-                let ny = cy + (ty - cy) * step;
-
-                if (Math.abs(tx - nx) < eps) nx = tx;
-                if (Math.abs(ty - ny) < eps) ny = ty;
-                if (nx !== tx || ny !== ty) moving = true;
-
-                el.dataset.lx = String(nx);
-                el.dataset.ly = String(ny);
-                el.style.setProperty('--look-x', `${nx}deg`);
-                el.style.setProperty('--look-y', `${ny}deg`);
-            });
-
-            if (moving) {
-                running = true;
-                raf = requestAnimationFrame(tick);
-            }
-        };
-
-        const kick = () => {
-            if (running || lookLockRef.current) return;
-            running = true;
-            raf = requestAnimationFrame(tick);
-        };
-
-        const onMove = (e: PointerEvent) => {
-            const t = e.target as Node;
-            const inside =
-                modeRef.current === 'fullscreen'
-                    ? t instanceof Element && !!t.closest('.gallery__controls')
-                    : !!galleryRef.current?.contains(t);
-            if (lookLockRef.current) {
-                lookingRef.current = false;
-                return;
-            }
-            lookingRef.current = inside;
-            if (inside) {
-                target.x = e.clientX;
-                target.y = e.clientY;
-            }
-            kick();
-        };
-
-        const onLeave = () => {
-            lookingRef.current = false;
-            kick();
-        };
-        window.addEventListener('pointermove', onMove);
-        document.documentElement.addEventListener('pointerleave', onLeave);
-        return () => {
-            window.removeEventListener('pointermove', onMove);
-            document.documentElement.removeEventListener('pointerleave', onLeave);
-            cancelAnimationFrame(raf);
-        };
-    }, []);
+        look.markLayoutDirty();
+    }, [holdGaps, mode, look]);
 
     useEffect(() => {
         if (!holdGaps) {
@@ -299,7 +178,9 @@ function Gallery({size}: {size: number}) {
                 return;
             }
 
-            const gapsStay = modeRef.current === 'fullscreen' && !!galleryRef.current?.querySelector('.gallery__controls:hover');
+            const gapsStay =
+                modeRef.current === 'fullscreen' &&
+                !!galleryRef.current?.querySelector('.gallery__controls:hover');
             if (gapsStay) {
                 setLookOff(false);
                 lookLockRef.current = false;
@@ -317,49 +198,49 @@ function Gallery({size}: {size: number}) {
             gridRef.current?.addEventListener('transitionend', onEnd);
             return () => gridRef.current?.removeEventListener('transitionend', onEnd);
         }
-    
+
         let lookTimer = 0;
         const arm = window.requestAnimationFrame(() => {
             setLookOff(true);
             lookTimer = window.setTimeout(() => {
-                gridRef.current?.querySelectorAll<HTMLElement>('.tile').forEach((el) => {
-                    el.dataset.lx = '0';
-                    el.dataset.ly = '0';
-                    el.style.setProperty('--look-x', '0deg');
-                    el.style.setProperty('--look-y', '0deg');
-                });
+                look.resetLook();
                 setTurn(false);
                 setSnap(true);
                 setHoldGaps(false);
             }, motion.lookOffMs);
         });
-    
+
         return () => {
             window.cancelAnimationFrame(arm);
             window.clearTimeout(lookTimer);
         };
-    }, [holdGaps]);
+    }, [holdGaps, look]);
 
     return (
-        <div 
-            className="gallery" 
-            ref={galleryRef} 
-            data-mode={mode} 
+        <div
+            className="gallery"
+            ref={galleryRef}
+            data-mode={mode}
             data-hold-gaps={holdGaps || undefined}
             data-look-off={lookOff || undefined}
             data-turn={turn || undefined}
             style={{ ...motionStyle(), '--size': `${size}` } as CSSProperties}
         >
-            <button className='gallery__controls gallery__controls--view' id='view' onClick={toggleMode}>{mode == 'fullscreen' ? 'gallery' : 'fullscreen' }</button>
+            <button
+                className="gallery__controls gallery__controls--view"
+                type="button"
+                onClick={toggleMode}
+            >
+                {mode === 'fullscreen' ? 'gallery' : 'fullscreen'}
+            </button>
             <button
                 className="gallery__controls gallery__controls--prev"
-                id="nav-prev"
                 type="button"
                 aria-label="Previous"
                 onClick={() => go(-1)}
             />
             <div className="gallery__grid" ref={gridRef}>
-                {Array.from({ length: size * size }, (_, index) => (
+                {Array.from({ length: cells }, (_, index) => (
                     <Tile
                         key={index}
                         size={size}
@@ -376,13 +257,12 @@ function Gallery({size}: {size: number}) {
             </div>
             <button
                 className="gallery__controls gallery__controls--next"
-                id="nav-next"
                 type="button"
                 aria-label="Next"
                 onClick={() => go(1)}
             />
         </div>
-    )
+    );
 }
 
-export default Gallery
+export default Gallery;
