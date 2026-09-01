@@ -1,0 +1,93 @@
+.tile {
+    perspective: var(--perspective);
+    transform-style: preserve-3d;
+    transform: translate3d(
+        calc((var(--col) - 1) * -1px),
+        calc((var(--row) - 1) * -1px),
+        0
+    );
+    transition: transform var(--t-gap) var(--e-gap);
+
+    &__look {
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        transform: rotateX(var(--look-x, 0deg)) rotateY(var(--look-y, 0deg));
+    }
+
+    &__card {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        transform-style: preserve-3d;
+
+        transition: transform var(--t-flip) var(--e-flip);
+        transition-delay: calc(var(--row) * var(--t-stagger));
+
+        &.is-flipped {
+            transform: rotateX(180deg);
+            transition-delay: calc((var(--size) - 1 - var(--row)) * var(--t-stagger));
+        }
+
+        &.is-snap {
+            transition: none;
+            transition-delay: 0ms;
+        }
+
+        &.is-spin-next,
+        &.is-spin-prev {
+            transform: rotateY(calc(var(--spin-y) * 180deg));
+
+            .tile__face--back {
+                transform: rotateY(180deg);
+            }
+        }
+
+        &.is-spin-next {
+            transition-delay: calc(var(--col) * var(--t-stagger));
+        }
+
+        &.is-spin-prev {
+            transition-delay: calc((var(--size) - 1 - var(--col)) * var(--t-stagger));
+        }
+    }
+
+    &__face {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        backface-visibility: hidden;
+
+        --r-tl: calc(var(--r) * (1 - min(var(--col), 1)) * (1 - min(var(--row), 1)));
+        --r-tr: calc(var(--r) * (1 - min(var(--size) - 1 - var(--col), 1)) * (1 - min(var(--row), 1)));
+        --r-bl: calc(var(--r) * (1 - min(var(--col), 1)) * (1 - min(var(--size) - 1 - var(--row), 1)));
+        --r-br: calc(var(--r) * (1 - min(var(--size) - 1 - var(--col), 1)) * (1 - min(var(--size) - 1 - var(--row), 1)));
+        border-radius: var(--r-tl) var(--r-tr) var(--r-br) var(--r-bl);
+        transition: border-radius var(--t-radius) var(--e-radius);
+
+        &--back {
+            transform: rotateX(180deg);
+        }
+
+        &--mosaic .tile__image {
+            width: calc(var(--size) * 100%);
+            height: calc(var(--size) * 100%);
+            left: calc(var(--col) * -100%);
+            top: calc(var(--row) * -100%);
+        }
+
+        &--full .tile__image {
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+    }
+
+    &__image {
+        position: absolute;
+        max-width: none;
+        object-fit: cover;
+    }
+}

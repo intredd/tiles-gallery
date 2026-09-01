@@ -1,0 +1,127 @@
+.gallery {
+    --gallery-padding: 0;
+    --gap: 2vw;
+    --r: 0.8vw;
+    --controls-size: 4vw;
+    --grid-width: 80vw;//min(80vw, calc(85vh * 16 / 9));
+    --grid-height: 85vh;//calc(var(--grid-width) * 9 / 16);
+
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    grid-template-columns: auto var(--grid-width) auto;
+    grid-template-rows: auto var(--grid-height);
+    grid-template-areas: 
+        "view view view"
+        "prev gallery next";
+    gap: 0;
+
+    &__controls {
+        background-color: transparent;
+        border: none;
+
+        &--view {
+            grid-area: view;
+            width: 100%;
+            height: 100%;
+            color: #fff;
+        }
+
+        &--prev {
+            grid-area: prev;
+        }
+
+        &--next {
+            grid-area: next;
+        }
+
+        &--prev,
+        &--next {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            padding: 0;
+            cursor: pointer;
+            color: #fff;
+            &::after {
+                content: "";
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 0.9vw;
+                height: 0.9vw;
+                border-left: 1.5px solid currentColor;
+                border-bottom: 1.5px solid currentColor;
+            }
+        }
+
+        &--prev::after {
+            transform: translate(-30%, -50%) rotate(45deg);   // <
+        }
+        &--next::after {
+            transform: translate(-70%, -50%) rotate(-135deg); // >
+        }
+    }
+
+    &__grid {
+        grid-area: gallery;
+        box-sizing: border-box;
+        width: var(--grid-width);
+        height: var(--grid-height);
+        padding: var(--gap);
+        padding-bottom: calc(2 * var(--gap));
+        display: grid;
+        grid-template-columns: repeat(var(--size), 1fr);
+        grid-template-rows: repeat(var(--size), 1fr);
+    }
+
+    &[data-hold-gaps] .tile__look {
+        transition: transform var(--t-look-off) var(--e-look-off);
+    }
+    
+    &[data-look-off] .tile__look {
+        transform: rotateX(0deg) rotateY(0deg);
+    }
+
+    &[data-turn] .tile__card {
+        transition-delay: 0ms;
+    
+        &:not(.is-flipped) {
+            transform: rotate3d(var(--flip-ax, 1), var(--flip-ay, 0), 0, 0deg);
+        }
+    
+        &.is-flipped {
+            transform: rotate3d(var(--flip-ax, 1), var(--flip-ay, 0), 0, 180deg);
+            transition-delay: 0ms;
+        }
+    
+        .tile__face--back {
+            transform: rotate3d(var(--flip-ax, 1), var(--flip-ay, 0), 0, 180deg);
+        }
+    }
+
+    &[data-mode="fullscreen"]:has(.gallery__controls:hover) .tile {
+        transform: translate3d(
+            calc((var(--col) - 1) * var(--gap)),
+            calc((var(--row) - 1) * var(--gap)),
+            0
+        );
+    }
+
+    &[data-mode="gallery"] .tile,
+    &[data-hold-gaps] .tile {
+        transform: translate3d(
+            calc((var(--col) - 1) * var(--gap)),
+            calc((var(--row) - 1) * var(--gap)),
+            0
+        );
+    }
+
+    &[data-mode="fullscreen"]:has(.gallery__controls:hover) .tile__face,
+    &[data-mode="gallery"] .tile__face,
+    &[data-hold-gaps] .tile__face {
+        border-radius: var(--r);
+    }
+
+}
