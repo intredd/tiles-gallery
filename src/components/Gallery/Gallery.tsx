@@ -33,6 +33,9 @@ function Gallery({ size }: { size: number }) {
 
     modeRef.current = mode;
 
+    const goRef = useRef<(delta: 1 | -1) => void>(() => {});
+    const toggleRef = useRef<() => void>(() => {});
+
     const look = useTileLook({
         gridRef,
         galleryRef,
@@ -144,6 +147,35 @@ function Gallery({ size }: { size: number }) {
         applyToggle();
     }
 
+    goRef.current = go;
+    toggleRef.current = toggleMode;
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+            const tag = (e.target as HTMLElement | null)?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                goRef.current(-1);
+                return;
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                goRef.current(1);
+                return;
+            }
+            if (e.key === 'm' || e.key === 'M') {
+                e.preventDefault();
+                toggleRef.current();
+            }
+        };
+
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
     // Snap is a one-frame "transition: none" paint so the next flip can change axis
     // without interpolating from the previous rotateX/rotateY. apply* read state from
     // this commit on purpose — do not add them to the dep array.
@@ -230,9 +262,23 @@ function Gallery({ size }: { size: number }) {
             <button
                 className="gallery__controls gallery__controls--view"
                 type="button"
+                aria-label="Toggle view"
                 onClick={toggleMode}
             >
-                {mode === 'fullscreen' ? 'gallery' : 'fullscreen'}
+                <span className="gallery__mark" aria-hidden="true">
+                    {Array.from({ length: cells }, (_, index) => (
+                        <i
+                            key={index}
+                            className="gallery__mark-cell"
+                            style={
+                                {
+                                    '--col': index % size,
+                                    '--row': Math.floor(index / size),
+                                } as CSSProperties
+                            }
+                        />
+                    ))}
+                </span>
             </button>
             <button
                 className="gallery__controls gallery__controls--prev"

@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react';
 
 export const motion = {
-    gapMs: 200,
+    gapMs: 400,
     gapEase: 'ease-out',
-    radiusMs: 200,
+    radiusMs: 400,
     radiusEase: 'ease-out',
     flipMs: 700,
     flipEase: 'ease-in-out',
