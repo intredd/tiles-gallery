@@ -15,10 +15,14 @@ type TileLook = {
     lookEl: HTMLElement | null;
     cx: number;
     cy: number;
+    hw: number;
+    hh: number;
     lx: number;
     ly: number;
     wx: number;
     wy: number;
+    wix: number;
+    wiy: number;
 };
 
 type LookApi = {
@@ -30,6 +34,7 @@ type LookApi = {
 
 const LOOK_TICK_MS = 1000 / motion.look.fps;
 const LOOK_WRITE_STEP = 0.05;
+const SHIFT_PER_DEG = motion.look.shift / ((180 / Math.PI) * motion.look.strength);
 
 function quantize(v: number) {
     return Math.round(v / LOOK_WRITE_STEP) * LOOK_WRITE_STEP;
@@ -38,16 +43,28 @@ function quantize(v: number) {
 function writeLook(t: TileLook, x: number, y: number) {
     const qx = quantize(x);
     const qy = quantize(y);
-    if (qx === t.wx && qy === t.wy) return;
+    const qix = quantize(qy * t.hw * SHIFT_PER_DEG);
+    const qiy = quantize(-qx * t.hh * SHIFT_PER_DEG);
+    if (qx === t.wx && qy === t.wy && qix === t.wix && qiy === t.wiy) return;
     t.wx = qx;
     t.wy = qy;
-    if (t.lookEl) t.lookEl.style.transform = `rotateX(${qx}deg) rotateY(${qy}deg)`;
+    t.wix = qix;
+    t.wiy = qiy;
+    if (!t.lookEl) return;
+    t.lookEl.style.transform = `rotateX(${qx}deg) rotateY(${qy}deg)`;
+    t.lookEl.style.setProperty('--look-ix', `${qix}px`);
+    t.lookEl.style.setProperty('--look-iy', `${qiy}px`);
 }
 
 function clearLookStyle(t: TileLook) {
     t.wx = 0;
     t.wy = 0;
-    if (t.lookEl) t.lookEl.style.transform = '';
+    t.wix = 0;
+    t.wiy = 0;
+    if (!t.lookEl) return;
+    t.lookEl.style.transform = '';
+    t.lookEl.style.removeProperty('--look-ix');
+    t.lookEl.style.removeProperty('--look-iy');
 }
 
 export function useTileLook({
@@ -123,10 +140,14 @@ export function useTileLook({
                     lookEl: node.firstElementChild instanceof HTMLElement ? node.firstElementChild : null,
                     cx: old?.cx ?? 0,
                     cy: old?.cy ?? 0,
+                    hw: old?.hw ?? 0,
+                    hh: old?.hh ?? 0,
                     lx: old?.lx ?? 0,
                     ly: old?.ly ?? 0,
                     wx: old?.wx ?? NaN,
                     wy: old?.wy ?? NaN,
+                    wix: old?.wix ?? NaN,
+                    wiy: old?.wiy ?? NaN,
                 });
             }
             tiles = next;
@@ -138,6 +159,8 @@ export function useTileLook({
                 const r = t.el.getBoundingClientRect();
                 t.cx = r.left + r.width / 2;
                 t.cy = r.top + r.height / 2;
+                t.hw = r.width / 2;
+                t.hh = r.height / 2;
             }
             dirty = false;
         };

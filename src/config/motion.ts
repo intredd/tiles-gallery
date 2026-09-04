@@ -14,6 +14,8 @@ export const motion = {
     look: {
         z: 400,
         strength: 0.25,
+        // atan(offset/z) * halfSize * shift → ~2–4px on a gallery cell
+        shift: 0.02,
         k: 0.03,
         kReturn: 0.1,
         eps: 0.001,

@@ -147,11 +147,16 @@
     }
 
     &[data-hold-gaps] .tile__look {
-        transition: transform var(--t-look-off) var(--e-look-off);
+        transition:
+            transform var(--t-look-off) var(--e-look-off),
+            --look-ix var(--t-look-off) var(--e-look-off),
+            --look-iy var(--t-look-off) var(--e-look-off);
     }
     
     &[data-look-off] .tile__look {
         transform: rotateX(0deg) rotateY(0deg);
+        --look-ix: 0px;
+        --look-iy: 0px;
     }
 
     &[data-turn] .tile__card {
