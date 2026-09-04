@@ -23,6 +23,7 @@ function Gallery({ size }: { size: number }) {
     const [holdGaps, setHoldGaps] = useState(false);
     const [lookOff, setLookOff] = useState(false);
     const [turn, setTurn] = useState(false);
+    const [peekOff, setPeekOff] = useState(false);
 
     const pending = useRef<Pending | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
@@ -35,8 +36,7 @@ function Gallery({ size }: { size: number }) {
 
     const goRef = useRef<(delta: 1 | -1) => void>(() => {});
     const toggleRef = useRef<() => void>(() => {});
-    const commitGoRef = useRef<(delta: 1 | -1) => void>(() => {});
-    const commitToggleRef = useRef<() => void>(() => {});
+    const armLookRef = useRef<(job: Pending) => void>(() => {});
 
     const look = useTileLook({
         gridRef,
@@ -127,23 +127,7 @@ function Gallery({ size }: { size: number }) {
         setMode(nextMode);
     }
 
-    function armLook(job: Pending) {
-        if (lookLockRef.current) return;
-        lookLockRef.current = true;
-        lookingRef.current = false;
-        pending.current = job;
-        setHoldGaps(true);
-    }
-
     function go(delta: 1 | -1) {
-        armLook({ type: 'go', delta });
-    }
-
-    function toggleMode() {
-        armLook({ type: 'toggle' });
-    }
-
-    function commitGo(delta: 1 | -1) {
         if (spin === 'x') {
             pending.current = { type: 'go', delta };
             setSpin(delta === 1 ? 'next' : 'prev');
@@ -154,7 +138,7 @@ function Gallery({ size }: { size: number }) {
         applyGo(delta);
     }
 
-    function commitToggle() {
+    function toggleMode() {
         if (spin !== 'x') {
             pending.current = { type: 'toggle' };
             setSpin('x');
@@ -165,10 +149,17 @@ function Gallery({ size }: { size: number }) {
         applyToggle();
     }
 
+    function armLook(job: Pending) {
+        if (lookLockRef.current) return;
+        lookLockRef.current = true;
+        lookingRef.current = false;
+        pending.current = job;
+        setHoldGaps(true);
+    }
+
     goRef.current = go;
     toggleRef.current = toggleMode;
-    commitGoRef.current = commitGo;
-    commitToggleRef.current = commitToggle;
+    armLookRef.current = armLook;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -178,17 +169,17 @@ function Gallery({ size }: { size: number }) {
 
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                goRef.current(-1);
+                armLookRef.current({ type: 'go', delta: -1 });
                 return;
             }
             if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                goRef.current(1);
+                armLookRef.current({ type: 'go', delta: 1 });
                 return;
             }
             if (e.key === 'm' || e.key === 'M') {
                 e.preventDefault();
-                toggleRef.current();
+                armLookRef.current({ type: 'toggle' });
             }
         };
 
@@ -199,29 +190,41 @@ function Gallery({ size }: { size: number }) {
     // Snap is a one-frame "transition: none" paint so the next flip can change axis
     // without interpolating from the previous rotateX/rotateY. apply* read state from
     // this commit on purpose — do not add them to the dep array.
+    // Double rAF: one React commit is not a vsync; without it, setSnap(false)+apply*
+    // coalesce with the snap paint and CSS interpolates the old axis.
     useEffect(() => {
         if (!snap) return;
 
         const job = pending.current;
-        pending.current = null;
+        let raf1 = 0;
+        let raf2 = 0;
 
-        if (job) {
-            setSnap(false);
-            if (job.type === 'go') applyGo(job.delta);
-            if (job.type === 'toggle') applyToggle();
-            if (job.type === 'open') applyOpenFromTile(job.tileIndex);
-            return;
-        }
-
-        const id = requestAnimationFrame(() => {
-            requestAnimationFrame(() => setSnap(false));
+        raf1 = requestAnimationFrame(() => {
+            raf2 = requestAnimationFrame(() => {
+                pending.current = null;
+                setSnap(false);
+                if (job?.type === 'go') applyGo(job.delta);
+                if (job?.type === 'toggle') applyToggle();
+                if (job?.type === 'open') applyOpenFromTile(job.tileIndex);
+            });
         });
-        return () => cancelAnimationFrame(id);
+
+        return () => {
+            cancelAnimationFrame(raf1);
+            cancelAnimationFrame(raf2);
+        };
     }, [snap]);
 
     useEffect(() => {
         look.markLayoutDirty();
     }, [holdGaps, mode, look]);
+
+    useEffect(() => {
+        if (!peekOff) return;
+        const onMove = () => setPeekOff(false);
+        window.addEventListener('pointermove', onMove);
+        return () => window.removeEventListener('pointermove', onMove);
+    }, [peekOff]);
 
     useEffect(() => {
         if (!holdGaps) {
@@ -235,7 +238,7 @@ function Gallery({ size }: { size: number }) {
             );
             const gapsStay =
                 modeRef.current === 'gallery' ||
-                (modeRef.current === 'fullscreen' && hot);
+                (modeRef.current === 'fullscreen' && hot && !peekOff);
             if (gapsStay) {
                 setLookOff(false);
                 lookLockRef.current = false;
@@ -264,14 +267,14 @@ function Gallery({ size }: { size: number }) {
                 look.resetLook();
                 setTurn(false);
                 const job = pending.current;
-                if (job?.type === 'go') {
+                if (job?.type === 'go' || job?.type === 'toggle') {
                     pending.current = null;
-                    commitGoRef.current(job.delta);
-                    dropTimer = window.setTimeout(() => setHoldGaps(false), flipHoldMs);
-                } else if (job?.type === 'toggle') {
-                    pending.current = null;
-                    commitToggleRef.current();
-                    dropTimer = window.setTimeout(() => setHoldGaps(false), flipHoldMs);
+                    if (job.type === 'go') goRef.current(job.delta);
+                    else toggleRef.current();
+                    dropTimer = window.setTimeout(() => {
+                        setHoldGaps(false);
+                        if (modeRef.current === 'fullscreen') setPeekOff(true);
+                    }, flipHoldMs);
                 } else {
                     setSnap(true);
                     setHoldGaps(false);
@@ -284,7 +287,7 @@ function Gallery({ size }: { size: number }) {
             window.clearTimeout(lookTimer);
             window.clearTimeout(dropTimer);
         };
-    }, [holdGaps, look, size]);
+    }, [holdGaps, look, size, peekOff]);
 
     return (
         <div
@@ -294,6 +297,7 @@ function Gallery({ size }: { size: number }) {
             data-hold-gaps={holdGaps || undefined}
             data-look-off={lookOff || undefined}
             data-turn={turn || undefined}
+            data-peek-off={peekOff || undefined}
             style={{ ...motionStyle(), '--size': `${size}` } as CSSProperties}
         >
             <button
