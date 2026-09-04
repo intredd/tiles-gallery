@@ -35,6 +35,8 @@ function Gallery({ size }: { size: number }) {
 
     const goRef = useRef<(delta: 1 | -1) => void>(() => {});
     const toggleRef = useRef<() => void>(() => {});
+    const commitGoRef = useRef<(delta: 1 | -1) => void>(() => {});
+    const commitToggleRef = useRef<() => void>(() => {});
 
     const look = useTileLook({
         gridRef,
@@ -76,7 +78,7 @@ function Gallery({ size }: { size: number }) {
     }
 
     function openFromTile(tileIndex: number, e: React.MouseEvent) {
-        if (mode !== 'gallery') return;
+        if (mode !== 'gallery' || lookLockRef.current) return;
 
         lookLockRef.current = true;
         lookingRef.current = false;
@@ -125,7 +127,23 @@ function Gallery({ size }: { size: number }) {
         setMode(nextMode);
     }
 
+    function armLook(job: Pending) {
+        if (lookLockRef.current) return;
+        lookLockRef.current = true;
+        lookingRef.current = false;
+        pending.current = job;
+        setHoldGaps(true);
+    }
+
     function go(delta: 1 | -1) {
+        armLook({ type: 'go', delta });
+    }
+
+    function toggleMode() {
+        armLook({ type: 'toggle' });
+    }
+
+    function commitGo(delta: 1 | -1) {
         if (spin === 'x') {
             pending.current = { type: 'go', delta };
             setSpin(delta === 1 ? 'next' : 'prev');
@@ -136,7 +154,7 @@ function Gallery({ size }: { size: number }) {
         applyGo(delta);
     }
 
-    function toggleMode() {
+    function commitToggle() {
         if (spin !== 'x') {
             pending.current = { type: 'toggle' };
             setSpin('x');
@@ -149,6 +167,8 @@ function Gallery({ size }: { size: number }) {
 
     goRef.current = go;
     toggleRef.current = toggleMode;
+    commitGoRef.current = commitGo;
+    commitToggleRef.current = commitToggle;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -210,13 +230,16 @@ function Gallery({ size }: { size: number }) {
                 return;
             }
 
+            const hot = !!galleryRef.current?.querySelector(
+                '.gallery__controls:hover, .gallery__controls:focus-visible',
+            );
             const gapsStay =
-                modeRef.current === 'fullscreen' &&
-                !!galleryRef.current?.querySelector('.gallery__controls:hover');
+                modeRef.current === 'gallery' ||
+                (modeRef.current === 'fullscreen' && hot);
             if (gapsStay) {
                 setLookOff(false);
                 lookLockRef.current = false;
-                lookingRef.current = true;
+                lookingRef.current = hot;
                 return;
             }
 
@@ -232,22 +255,36 @@ function Gallery({ size }: { size: number }) {
         }
 
         let lookTimer = 0;
+        let dropTimer = 0;
+        const flipHoldMs = motion.flipMs + motion.staggerMs * (size - 1);
         const arm = window.requestAnimationFrame(() => {
             setLookOff(true);
             look.releaseToCss();
             lookTimer = window.setTimeout(() => {
                 look.resetLook();
                 setTurn(false);
-                setSnap(true);
-                setHoldGaps(false);
+                const job = pending.current;
+                if (job?.type === 'go') {
+                    pending.current = null;
+                    commitGoRef.current(job.delta);
+                    dropTimer = window.setTimeout(() => setHoldGaps(false), flipHoldMs);
+                } else if (job?.type === 'toggle') {
+                    pending.current = null;
+                    commitToggleRef.current();
+                    dropTimer = window.setTimeout(() => setHoldGaps(false), flipHoldMs);
+                } else {
+                    setSnap(true);
+                    setHoldGaps(false);
+                }
             }, motion.lookOffMs);
         });
 
         return () => {
             window.cancelAnimationFrame(arm);
             window.clearTimeout(lookTimer);
+            window.clearTimeout(dropTimer);
         };
-    }, [holdGaps, look]);
+    }, [holdGaps, look, size]);
 
     return (
         <div

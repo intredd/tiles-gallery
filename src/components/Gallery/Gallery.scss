@@ -114,11 +114,11 @@
         transition: border-radius var(--t-radius) var(--e-radius);
     }
 
-    &[data-mode="fullscreen"]:not([data-hold-gaps]) &__mark {
+    &[data-mode="fullscreen"] &__mark {
         gap: 0;
     }
 
-    &[data-mode="fullscreen"]:not([data-hold-gaps]) &__mark-cell {
+    &[data-mode="fullscreen"] &__mark-cell {
         --r-tl: calc(var(--mark-r) * (1 - min(var(--col), 1)) * (1 - min(var(--row), 1)));
         --r-tr: calc(
             var(--mark-r) * (1 - min(var(--size) - 1 - var(--col), 1)) * (1 - min(var(--row), 1))
@@ -171,7 +171,8 @@
         }
     }
 
-    &[data-mode="fullscreen"]:has(.gallery__controls:hover) .tile {
+    &[data-mode="fullscreen"]:has(.gallery__controls:hover) .tile,
+    &[data-mode="fullscreen"]:has(.gallery__controls:focus-visible) .tile {
         transform: translate3d(
             calc((var(--col) - 1) * var(--gap)),
             calc((var(--row) - 1) * var(--gap)),
@@ -189,6 +190,7 @@
     }
 
     &[data-mode="fullscreen"]:has(.gallery__controls:hover) .tile__face,
+    &[data-mode="fullscreen"]:has(.gallery__controls:focus-visible) .tile__face,
     &[data-mode="gallery"] .tile__face,
     &[data-hold-gaps] .tile__face {
         border-radius: var(--r);
