@@ -9,7 +9,7 @@ export const photos: Photo[] = Array.from({ length: 27 }, (_, index) => {
   
     return {
       id: n,
-      src: `/images/${n}.jpg`,
+      src: `${import.meta.env.BASE_URL}images/${n}.jpg`,
       alt: `Photo ${n}`,
     }
   })

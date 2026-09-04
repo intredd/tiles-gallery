@@ -2,6 +2,7 @@
   "name": "tiles-gallery-react",
   "private": true,
   "version": "0.0.0",
+  "description": "Interactive 3D CSS tile photo gallery",
   "type": "module",
   "scripts": {
     "dev": "vite",
