@@ -84,10 +84,10 @@
         }
 
         &--mosaic .tile__image {
-            width: calc(var(--size) * 100%);
-            height: calc(var(--size) * 100%);
-            left: calc(var(--col) * -100%);
-            top: calc(var(--row) * -100%);
+            width: calc(var(--size) * 100% + 16%);
+            height: calc(var(--size) * 100% + 16%);
+            left: calc(var(--col) * -100% - 8%);
+            top: calc(var(--row) * -100% - 8%);
         }
 
         &--full .tile__image {
