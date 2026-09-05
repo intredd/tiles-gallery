@@ -172,7 +172,7 @@
         }
     
         .tile__face--back {
-            transform: rotate3d(var(--flip-ax, 1), var(--flip-ay, 0), 0, 180deg);
+            transform: rotate3d(var(--flip-ax, 1), var(--flip-ay, 0), 0, 180deg) translateZ(1px);
         }
     }
 

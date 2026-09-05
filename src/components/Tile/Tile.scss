@@ -51,7 +51,7 @@
             transform: rotateY(calc(var(--spin-y) * 180deg));
 
             .tile__face--back {
-                transform: rotateY(180deg);
+                transform: rotateY(180deg) translateZ(1px);
             }
         }
 
@@ -71,6 +71,7 @@
         inset: 0;
         overflow: hidden;
         backface-visibility: hidden;
+        transform: translateZ(1px);
 
         --r-tl: calc(var(--r) * (1 - min(var(--col), 1)) * (1 - min(var(--row), 1)));
         --r-tr: calc(var(--r) * (1 - min(var(--size) - 1 - var(--col), 1)) * (1 - min(var(--row), 1)));
@@ -80,7 +81,7 @@
         transition: border-radius var(--t-radius) var(--e-radius);
 
         &--back {
-            transform: rotateX(180deg);
+            transform: rotateX(180deg) translateZ(1px);
         }
 
         &--mosaic .tile__image {
